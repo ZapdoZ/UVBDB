@@ -1,0 +1,248 @@
+<!-- START SIGMA IMPORTS -->
+<script src="sigmajs/src/sigma.core.js"></script>
+<script src="sigmajs/src/conrad.js"></script>
+<script src="sigmajs/src/utils/sigma.utils.js"></script>
+<script src="sigmajs/src/utils/sigma.polyfills.js"></script>
+<script src="sigmajs/src/sigma.settings.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.dispatcher.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.configurable.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.graph.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.camera.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.quad.js"></script>
+<script src="sigmajs/src/classes/sigma.classes.edgequad.js"></script>
+<script src="sigmajs/src/captors/sigma.captors.mouse.js"></script>
+<script src="sigmajs/src/captors/sigma.captors.touch.js"></script>
+<script src="sigmajs/src/renderers/sigma.renderers.canvas.js"></script>
+<script src="sigmajs/src/renderers/sigma.renderers.webgl.js"></script>
+<script src="sigmajs/src/renderers/sigma.renderers.svg.js"></script>
+<script src="sigmajs/src/renderers/sigma.renderers.def.js"></script>
+<script src="sigmajs/src/renderers/webgl/sigma.webgl.nodes.def.js"></script>
+<script src="sigmajs/src/renderers/webgl/sigma.webgl.nodes.fast.js"></script>
+<script src="sigmajs/src/renderers/webgl/sigma.webgl.edges.def.js"></script>
+<script src="sigmajs/src/renderers/webgl/sigma.webgl.edges.fast.js"></script>
+<script src="sigmajs/src/renderers/webgl/sigma.webgl.edges.arrow.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.labels.def.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.hovers.def.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.nodes.def.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edges.def.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edges.curve.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edges.arrow.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edges.curvedArrow.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edgehovers.def.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edgehovers.curve.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edgehovers.arrow.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.edgehovers.curvedArrow.js"></script>
+<script src="sigmajs/src/renderers/canvas/sigma.canvas.extremities.def.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.utils.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.nodes.def.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.edges.def.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.edges.curve.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.labels.def.js"></script>
+<script src="sigmajs/src/renderers/svg/sigma.svg.hovers.def.js"></script>
+<script src="sigmajs/src/middlewares/sigma.middlewares.rescale.js"></script>
+<script src="sigmajs/src/middlewares/sigma.middlewares.copy.js"></script>
+<script src="sigmajs/src/misc/sigma.misc.animation.js"></script>
+<script src="sigmajs/src/misc/sigma.misc.bindEvents.js"></script>
+<script src="sigmajs/src/misc/sigma.misc.bindDOMEvents.js"></script>
+<script src="sigmajs/src/misc/sigma.misc.drawHovers.js"></script>
+<script src="sigmajs/plugins/sigma.layout.forceAtlas2/worker.js"></script>
+<script src="sigmajs/plugins/sigma.layout.forceAtlas2/supervisor.js"></script>
+<!-- END SIGMA IMPORTS -->
+
+<!-- SQL lib-->
+<script src='/sqljs/sql.js'></script>
+<!-- -->
+
+
+<h3 id="TitleCS">No callsign selected</h3>
+<p id="InfoCS">Select a callsign</p>
+<div id="container">
+  <style>
+    #graph-container {
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      position: absolute;
+    }
+  </style>
+  <div id="graph-container"></div>
+</div>
+
+<script>  
+  initSqlJs().then(function(SQL){
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/Databases/BuzzerDB.sqlite3', true);
+  xhr.responseType = 'arraybuffer';
+  
+  xhr.onload = e => {
+    var uInt8Array = new Uint8Array(xhr.response);
+    window.db = new SQL.Database(uInt8Array);
+    getdata();
+  };
+  xhr.send();
+  });
+  </script>
+  <script>
+  function getdata(){
+    // Put all distinct calls into one array
+    var calls = window.db.exec("SELECT DISTINCT(callsigns) FROM UVBMSGS");
+    var allcalls_uncorrected = [];
+    calls[0]['values'].forEach(element => {
+      allcalls_uncorrected.push(element[0])
+    });
+
+    // Separate calls
+    var calls_corrected = [];
+    allcalls_uncorrected.forEach(element => {
+      var cs_split = element.split(" ");
+      cs_split.forEach(element => {
+        if(element != ""){
+          calls_corrected.push(element);
+        }
+      });
+    });
+    calls_corrected = calls_corrected.filter((v, i, a) => a.indexOf(v) === i);
+
+    // All actual calls are now in calls_corrected
+    var calls_totalcount = {};
+    calls_corrected.forEach(element => {
+      var count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + element + '%"')[0]['values'][0][0];
+      calls_totalcount[element] = count;
+    });
+
+    // All calls and their usages are now in calls_totalcount
+
+    // Checks all connections for all Callsigns and ignores duplicates
+    var calls_checked = [];
+    var calls_all_connections = {};
+    calls_corrected.forEach(element => {
+      var call_origin = element;
+      var call_connections = {};
+      calls_corrected.forEach(element => {
+        var call_target = element;
+        if(calls_checked.includes(call_target) || call_origin == call_target){
+          return;
+        }
+        origin_target_count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + call_origin + '%" AND callsigns LIKE "%' + call_target + '%"')[0]['values'][0][0];
+        if(origin_target_count != 0){
+          call_connections[call_target] = origin_target_count;
+        }
+      });
+      calls_checked.push(call_origin);
+      if (Object.keys(call_connections).length != 0){
+        calls_all_connections[call_origin] = call_connections;
+      }
+    });
+    plotgraph(calls_totalcount, calls_all_connections);
+  }
+
+
+
+  function plotgraph(calls_totalcount, calls_all_connections){
+      sigma.classes.graph.addMethod('neighbors', function(nodeId) {
+      var k,
+          neighbors = {},
+          index = this.allNeighborsIndex[nodeId] || {};
+
+      for (k in index)
+        neighbors[k] = this.nodesIndex[k];
+
+      return neighbors;
+  });
+
+  var
+      g = {
+        nodes: [],
+        edges: []
+      };
+  console.log(calls_totalcount);
+  console.log(calls_all_connections);
+  var nbrofcalls = Object.keys(calls_totalcount).length;
+  console.log(nbrofcalls);
+  for(i in calls_totalcount){
+    g.nodes.push({
+      id: "CS_".concat(i),
+      label: i,
+      x: Math.random(),
+      y: Math.random(),
+      size: calls_totalcount[i],
+      color: "#e37c22" 
+    });
+  };
+
+  for(i in calls_all_connections){ // 94
+    for(j in calls_all_connections[i]){
+      for(k=0; k<calls_all_connections[i][j]; k++){
+        g.edges.push({
+        id: 'EDGE_' + i + "_" + j + "_" + k,
+        source: 'CS_' + i,
+        target: 'CS_' + j,
+        color: "#555555",
+        size: 0.1
+        });
+      };   
+    };
+  };
+
+  console.log(g.edges);
+  s = new sigma({
+    graph: g,
+    container: 'graph-container',
+    settings: {
+      drawEdges: true,
+      labelThreshold: 0,
+      minEdgeSize: 0.1,
+      maxEdgeSize: 0.12
+    }
+  });
+
+
+
+  // Start the ForceAtlas2 algorithm:
+  s.startForceAtlas2({worker: false, barnesHutOptimize: true, iterationsPerRender: 500, adjustSizes: true});
+  setTimeout(function() { s.stopForceAtlas2(); }, 20000);
+
+  // The Neighbour thing is literally 100% copypaste from sigmajs' website lol
+  s.graph.nodes().forEach(function(n) {
+    n.originalColor = n.color;
+    });
+    s.graph.edges().forEach(function(e) {
+      e.originalColor = e.color;
+  });
+  s.bind('clickNode', function(e) {
+          var nodeId = e.data.node.id,
+              toKeep = s.graph.neighbors(nodeId);
+          toKeep[nodeId] = e.data.node;
+
+          s.graph.nodes().forEach(function(n) {
+            if (toKeep[n.id])
+              n.color = n.originalColor;
+            else
+              n.color = '#eee';
+          });
+
+          s.graph.edges().forEach(function(e) {
+            if (toKeep[e.source] && toKeep[e.target])
+              e.color = e.originalColor;
+            else
+              e.color = '#eee';
+          });
+          document.getElementById("TitleCS").innerHTML = e.data.node.label;
+          document.getElementById("InfoCS").innerHTML = "Use cases: " + e.data.node.size;
+          s.refresh();
+        });
+
+  s.bind('clickStage', function(e) {
+    s.graph.nodes().forEach(function(n) {
+    n.color = n.originalColor;
+    });
+
+    s.graph.edges().forEach(function(e) {
+      e.color = e.originalColor;
+      });
+
+    s.refresh();
+    }); 
+    }
+  </script>
