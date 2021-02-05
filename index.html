@@ -72,7 +72,7 @@
 <script>  
   initSqlJs().then(function(SQL){
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/Databases/BuzzerDB.sqlite3', true);
+  xhr.open('GET', 'https://zapdoz.github.io/UVBDB/Databases/BuzzerDB.sqlite3', true);
   xhr.responseType = 'arraybuffer';
   
   xhr.onload = e => {
