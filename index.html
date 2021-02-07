@@ -59,6 +59,7 @@
 
 <h3 id="TitleCS">No callsign selected</h3>
 <p id="InfoCS">Select a callsign</p>
+<p id="randomrec"></p>
 <div id="container">
   <style>
     #graph-container {
@@ -67,6 +68,7 @@
       left: 0;
       right: 0;
       position: absolute;
+      z-index: -1;
     }
   </style>
   <div id="graph-container"></div>
@@ -204,7 +206,7 @@
 
   // Start the ForceAtlas2 algorithm:
   s.startForceAtlas2({worker: false, barnesHutOptimize: true, iterationsPerRender: 500, adjustSizes: true});
-  setTimeout(function() { s.stopForceAtlas2(); }, 20000);
+  setTimeout(function() { s.stopForceAtlas2(); }, 10000);
 
   // The Neighbour thing is literally 100% copypaste from sigmajs' website lol
   s.graph.nodes().forEach(function(n) {
@@ -231,8 +233,10 @@
             else
               e.color = '#eee';
           });
+          allRecsWithCS = window.db.exec("SELECT reclink FROM UVBMSGS WHERE CALLSIGNS LIKE '%" + e.data.node.label + "%' ")[0]['values'];
           document.getElementById("TitleCS").innerHTML = e.data.node.label;
           document.getElementById("InfoCS").innerHTML = "Use cases: " + e.data.node.size;
+          document.getElementById("randomrec").innerHTML = "<a href=\"" + allRecsWithCS[Math.floor(Math.random() * allRecsWithCS.length)] + "\"> View random recording with " + e.data.node.label + "</a>";
           s.refresh();
         });
 
