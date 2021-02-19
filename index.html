@@ -74,6 +74,29 @@
   <div id="graph-container"></div>
 </div>
 
+<script>
+  function getEra(){
+    var era = new URLSearchParams(window.location.search).get('era')
+    if (era == null){
+      window.daterange = '';
+      window.daterangeAND = '';
+    }
+    else if (era == 'nzhti'){
+      window.daterange = ' WHERE DATE(zulutime) BETWEEN \'2020-12-30\' AND \'2022-12-30\'';
+      window.daterangeAND = ' AND DATE(zulutime) BETWEEN \'2020-12-30\' AND \'2022-12-30\'';
+    }
+    else if (era == 'anvf'){
+      window.daterange = ' WHERE DATE(zulutime) BETWEEN \'2019-02-01\' AND \'2020-12-30\'';
+      window.daterangeAND = ' AND DATE(zulutime) BETWEEN \'2019-02-01\' AND \'2020-12-30\'';
+    }
+    else{
+      window.daterange = '';
+      window.daterangeAND = '';
+    }
+  }
+</script>
+
+
 <script>  
   initSqlJs().then(function(SQL){
   var xhr = new XMLHttpRequest();
@@ -83,6 +106,7 @@
   xhr.onload = e => {
     var uInt8Array = new Uint8Array(xhr.response);
     window.db = new SQL.Database(uInt8Array);
+    getEra();
     getdata();
   };
   xhr.send();
@@ -91,7 +115,7 @@
   <script>
   function getdata(){
     // Put all distinct calls into one array
-    var calls = window.db.exec("SELECT DISTINCT(callsigns) FROM UVBMSGS");
+    var calls = window.db.exec("SELECT DISTINCT(callsigns) FROM UVBMSGS" + window.daterange);
     var allcalls_uncorrected = [];
     calls[0]['values'].forEach(element => {
       allcalls_uncorrected.push(element[0])
@@ -112,7 +136,7 @@
     // All actual calls are now in calls_corrected
     var calls_totalcount = {};
     calls_corrected.forEach(element => {
-      var count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + element + '%"')[0]['values'][0][0];
+      var count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + element + '%"' + window.daterangeAND)[0]['values'][0][0];
       calls_totalcount[element] = count;
     });
 
@@ -129,7 +153,7 @@
         if(calls_checked.includes(call_target) || call_origin == call_target){
           return;
         }
-        origin_target_count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + call_origin + '%" AND callsigns LIKE "%' + call_target + '%"')[0]['values'][0][0];
+        origin_target_count = window.db.exec('SELECT COUNT(*) FROM UVBMSGS WHERE callsigns LIKE "%' + call_origin + '%" AND callsigns LIKE "%' + call_target + '%"' + window.daterangeAND)[0]['values'][0][0];
         if(origin_target_count != 0){
           call_connections[call_target] = origin_target_count;
         }
